@@ -549,3 +549,8 @@ Reinforcing this view, the corresponding free theorem seems to also be about pre
    (forall x y.     f (       p x y) =        q (    g x) (    h y))
 => (forall x y. map f (liftA2 p x y) = liftA2 q (map g x) (map h y))
 ```
+
+Discussion links
+---------------
+- [r/haskell thread](https://www.reddit.com/r/haskell/comments/10hr8qg/everything_you_never_wanted_to_know_about/)
+- [haskell-cafe mailing list](https://mail.haskell.org/pipermail/haskell-cafe/2023-January/135830.html)

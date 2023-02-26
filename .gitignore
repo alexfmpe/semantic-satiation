@@ -1,3 +1,7 @@
 *.hi
 *.o
-dist-newstyle
+dist-newstyle/
+dist/
+ghcid-output.txt
+result
+result-*

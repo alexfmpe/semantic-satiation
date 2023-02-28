@@ -25,6 +25,7 @@ This is a literate haskell file, so we start by getting the extensions/imports o
 ```haskell
 > {-# LANGUAGE CPP #-}
 > {-# LANGUAGE FunctionalDependencies #-}
+> {-# LANGUAGE TypeFamilies #-}
 > import Prelude hiding (filter)
 > import Data.ByteString (ByteString)
 > import Data.ByteString qualified as ByteString
@@ -47,7 +48,7 @@ Instead of the usual we'll do
 -- #ifdef FILTER_FUNDEPS
 -->
 ```haskell
-> class Filterable f a | f -> a where
+> class FilterableX f a | f -> a where
 >   filter :: (a -> Bool) -> f -> f
 
 > instance Filterable [a] a where
@@ -143,29 +144,15 @@ We can implement this behavior uniquely in terms of `ByteString.filter`, but not
   instance Filterable [Word4] Word4
 ```
 
-so why can't we do something similar? Well, for `Word4` we'd be splitting each `Word8` in two and independently applying the predicate, but the action taken (keep or drop) wouldn't be independent so we'd violate _Specificity_. For our uncurried `Word16`, we'd need to grab bytes in pairs, which we could filter atomically. But even assuming we could do something acceptable with leftover bytes in odd-length bytestrings, there's a problem of "resolution". We'd end up skipping over bytestrings of different parity - in particular, singletons would never be emptied.
-The `Word8` implementation allows individual targetting, thus suggesting another partial order, from which we again pick the minimal:
+so why can't we do something similar? Well, for `Word4` we'd be splitting each `Word8` in two and independently applying the predicate, but the action taken (keep or drop) wouldn't be independent so we'd violate _Specificity_. For our uncurried `Word16`, we'd need to grab bytes in pairs, which we could filter atomically. However, this breaks down once we consider odd lengths. What would this filter do when given a predicate and a singleton? If we don't apply the predicate to the element we have a `const`. We need to always return the singleton or break _Identity_. Thus we end up stuck on a non-empty bytestring. Since the `Word8` implementation allows making further "progress", another partial order suggests itself, from which we again pick the minimal:
 
 ```haskell
-  forall p. f p xs = ys => (exists q. filter q xs = ys)
+  (forall p. filter p xs = xs) => (forall f p. f p xs = xs)
 ```
 
-     [1, 2, 2, 1] -> [1, 2]
-8 16 [4, 3, 2, 1] ->
+Meaning, the canonical filter is able to throw out everything that can be thrown out. Let's call this the _Completeness_ law.
 
-[1, 2, 2, 1] -> [1,2]
-
-[1, 2]
-
-
-[(1,2), (2,1)]
-
-That is, we require that each input-to-output mapping estabilished by a law-abiding filter implementation `f` is also estabilished by our canonical instance.
-
-Let's call this universal property _Filter fitness_, and the previous one _Predicate fitness_.
-
-
-Note that with _Filter fitness_ we can also reject the trivial instance
+Backtracking just a bit, note that with the universal property we can also reject the trivial instance
 ```haskell
 instance Filterable [a] a where
   filter p xs = xs
@@ -221,18 +208,19 @@ class Filterable f a => Rooted f where
 This can be fixed by instead using an associated type family:
 
 ```haskell
-class Filter f where
-  type PredicateTarget f :: *
-  filter :: (PredicateTarget f -> Bool) -> f -> f
+> class Filterable f where
+>  type PredicateTarget f :: *
+>  filter :: (PredicateTarget f -> Bool) -> f -> f
 
-class Filterable f => Rooted f where
-  root :: f
+> class Filterable f => Rooted f where
+>  root :: f
 
-instance Rooted [a] where
-  root = []
+> instance Rooted Text where
+>  root = Text.empty
 
-instance Rooted Text x where
-  root = Text.empty
+> instance Rooted [a] where
+>   root = []
+
 
 <!--
 -- #endif

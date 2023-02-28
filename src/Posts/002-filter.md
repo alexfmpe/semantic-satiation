@@ -228,7 +228,7 @@ This can be fixed by instead using an associated type family:
 
 Here's a [counterexample](https://blog.functorial.com/posts/2015-12-06-Counterexamples.html) of a type that is `Filter` but not `Rooted`:
 ```haskell
-data NotRooted b a = NotRooted Bool [a]
+data NotRooted b a = NotRooted b [a]
 instance Filterable (NotRooted a) where
   type PredicateTarget (NotRooted a) = a
   filter p (NotRooted b xs) = NotRooted b (filter p xs)

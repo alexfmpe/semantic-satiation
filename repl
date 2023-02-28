@@ -1,1 +1,1 @@
-ghci src/Posts/001-applicative-laws.lhs -optL -q
+ghci src/Posts/002-filter.lhs -optL -q

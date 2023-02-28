@@ -4,7 +4,25 @@ DRAFT
 Filtering constraints
 ========
 
-<!--
+A common formulation for a filtering class is
+
+```haskell
+class Filterable f where
+  filter :: (a -> Bool) -> f a -> f a
+
+Distributivity
+  filter f . filter g = filter (\x -> f x && g x)
+
+Identity
+  filter (const True) = id
+```
+
+which relies on parametricity of `(* -> *)` types. This rules out "obvious" use cases like `ByteString` and `Text`, and often `Functor` is a superclass, throwing `Set` out the window as well.
+As it turns out, if we narrow down the laws enough, there's no need to care about the specifiy arity/kind. Note the identity law will force the second argument and the return to have unifiable types, so we can parametrize things as much as needed, via `MultiParamTypeClasses` or associated type families, and constrain via semantics rather than via syntax.
+
+This is a literate haskell file, so we start by getting the extensions/imports out of the way.
+
+```haskell
 > {-# LANGUAGE CPP #-}
 > {-# LANGUAGE FunctionalDependencies #-}
 > import Prelude hiding (filter)
@@ -21,61 +39,37 @@ Filtering constraints
 > import Data.Text (Text)
 > import Data.Text qualified as Text
 > import Data.Word (Word8, Word16)
--->
-
-A common formulation for a filtering class is
-
-<!--
-#ifdef FILTER_PARAMETRIC
--->
-```haskell
-> class Filter f where
->   filter :: (a -> Bool) -> f a -> f a
-
-Distributivity
-  filter f . filter g = filter (\x -> f x && g x)
-
-Identity
-  filter (const True) = id
 ```
 
-<!--
-#endif
--->
-
-With laws strong enough, we need not care about a particular arity/kind. For instance, the identity law will force the second argument and the return to have unifiable types, so we can parametrize things as much as needed, via `MultiParamTypeClasses` or associated type families, and constrain via semantics rather than via syntax.
-
-So instead of the usual
-
-we'll do
+Instead of the usual we'll do
 
 <!--
 -- #ifdef FILTER_FUNDEPS
 -->
 ```haskell
-> class Filter f a | f -> a where
+> class Filterable f a | f -> a where
 >   filter :: (a -> Bool) -> f -> f
 
-> instance Filter [a] a where
+> instance Filterable [a] a where
 >   filter = List.filter
 
-> instance Filter (Set a) a where
+> instance Filterable (Set a) a where
 >   filter = Set.filter
 
-> instance Filter Text Char where
+> instance Filterable Text Char where
 >   filter = Text.filter
 
-> instance Filter ByteString Word8 where
+> instance Filterable ByteString Word8 where
 >   filter = ByteString.filter
 ```
-and play the obnoxiously nitpicking adversary by throwing intuitively wrong instances at it until we figure out the correct constraints.
+and play the obnoxious nitpicking adversary by throwing intuitively wrong instances at it until we figure out the correct constraints.
 
-Glass half empty, glass half full. As above, so below
+No more, no less
 --------
 The usual laws prevent us from "under-filtering", as
 
 ```haskell
-instance Filter [a] a where
+instance Filterable [a] a where
   filter p xs = case any p xs of
     True -> xs
     False -> []
@@ -91,14 +85,14 @@ contradicts _Distributivity_
 But what about "over-filtering"?
 
 ```haskell
-instance Filter [a] a where
+instance Filterable [a] a where
   filter p xs = case all p xs of
     True -> xs
     False -> []
 ```
 
-Why is this a problem? Because we want each element to be either thrown out or kept depending exclusively on what it's mapped to by the predicate.
-With these loose instances we're allowing even mutually exclusive predicates to cause the same filtering.
+Why is this a problem? Because we want each element to either be thrown out or kept depending exclusively on what it's mapped to by the predicate.
+With these loose instances we're even allowing mutually exclusive predicates to cause the same filtering.
 We address this by also requiring that if a value can be filtered to multiple ones, then mutually exclusive predicates must be mapped to different values:
 
 ```haskell
@@ -108,14 +102,13 @@ We address this by also requiring that if a value can be filtered to multiple on
 
 Liberties constrain, constraints liberate
 --------
-We lose parametricity and thus free theorems, which means more care must be taken with laws.
-The extra parameter brings the freedom to do silly things like
+We lose parametricity and thus free theorems, which means more care must be taken with laws. The extra parameter brings the freedom to do silly things like
 
 ```haskell
 > dup :: a -> (a,a)
 > dup a = (a,a)
 
-instance Filter ByteString (Word8, Word8) where
+instance Filterable ByteString (Word8, Word8) where
   filter p = ByteString.filter (p . dup)
 ```
 
@@ -124,7 +117,7 @@ We can enforce this via a [universal property](https://en.wikipedia.org/wiki/Uni
 Namely, if there's a unique way to "detour" the given predicate through another law-abiding one, then the other one is "better".
 We require the "best" such predicate, or that all such "best" are all equivalent/isomorphic.
 
-Note there's no unique way to implement `ByteString.filter` with `Silly.filter`, since the `Silly` implementation has an extra redundant `Word8` floating around.
+Note there's no unique way to implement `ByteString.filter` with `Silly.filter`, since the `Silly` one has an extra redundant `Word8` floating around.
 ```haskell
   ByteString.filter p = Silly.filter (p . fst)
   ByteString.filter p = Silly.filter (p . snd)
@@ -135,19 +128,19 @@ The resulting law is
   forall f. (exists unique g. f (p . g) = filter p) => g = id
 ```
 
-Put another way, given a partial order over law-abiding filter functions with ```f1 <= f2``` meaning ```f1 (p . g) = f2 p```, we take a minimal predicate, as it is _equivalent_ (sufficient and necessary) to lawfulness.
+Put another way, given a partial order over law-abiding filter functions with ```f1 <= f2``` meaning ```f1 (p . g) = f2 p```, we take a minimal implementation, as it is _equivalent_ (sufficient and necessary) to lawfulness.
 
-What about an overly tight fit? Pretend there's some `Word4` type representing a nibble with the usual instances:
+What about an overly tight fit? Pretend there's some `Word4` type representing a nibble
 ```haskell
-instance Filter ByteString Word4 where
+instance Filterable ByteString Word4 where
   filter p = ByteString.filter (p . fromIntegral . (`div` 16)) -- Or `mod` for the other nibble
 ```
 
-We can (and did) implement this behavior uniquely in terms of `ByteString.filter`, but not the other way around. There's just no way to shoehorn a predicate that distinguishes between 2^8 values into a lower "resolution" one that can only deal with 2^4. But all this applies only when we're trying to match the types directly one-to-one. Clearly the following exist
+We can implement this behavior uniquely in terms of `ByteString.filter`, but not the other way around. There's just no way to shoehorn a predicate that distinguishes between 2^8 values into a lower "resolution" one that can only deal with 2^4. However, all this applies only when we're trying to match the types directly one-to-one. Clearly the following exist
 
 ```haskell
-  instance Filter [(Word8, Word8)] (Word8, Word8)
-  instance Filter [Word4] Word4
+  instance Filterable [(Word8, Word8)] (Word8, Word8)
+  instance Filterable [Word4] Word4
 ```
 
 so why can't we do something similar? Well, for `Word4` we'd be splitting each `Word8` in two and independently applying the predicate, but the action taken (keep or drop) wouldn't be independent so we'd violate _Specificity_. For our uncurried `Word16`, we'd need to grab bytes in pairs, which we could filter atomically. But even assuming we could do something acceptable with leftover bytes in odd-length bytestrings, there's a problem of "resolution". We'd end up skipping over bytestrings of different parity - in particular, singletons would never be emptied.
@@ -171,9 +164,10 @@ That is, we require that each input-to-output mapping estabilished by a law-abid
 
 Let's call this universal property _Filter fitness_, and the previous one _Predicate fitness_.
 
-Note that with _Filter fitness_ we can reject the trivial instance
+
+Note that with _Filter fitness_ we can also reject the trivial instance
 ```haskell
-instance Filter [a] a where
+instance Filterable [a] a where
   filter p xs = xs
 ```
 
@@ -183,25 +177,25 @@ Trivial.filter p = List.filter $ const True . p
 ```
 but `List.filter` can't be factored in terms of `Trivial.filter`
 
-What might be more surprising is that this criterion prevents not just the whole, but *any* part of the structure from escaping the filter semantics:
+What's more interesting is that this criterion prevents not just the whole, but *any* part of the structure from escaping the filter semantics:
 
 ```haskell
-  data A x y = A [x] [y]
+> data A x y = A [x] [y]
 ```
 
 ```haskell
 module Good
 
-instance Filter (A x y) (Either x y) where
-  filter p (A xs ys) = A
-    (List.filter (p . Left) xs)
-    (List.filter (p . Right) ys)
+> instance Filterable (A x y) (Either x y) where
+>  filter p (A xs ys) = A
+>    (List.filter (p . Left) xs)
+>    (List.filter (p . Right) ys)
 ```
 
 ```haskell
 module Bad
 
-instance Filter (A x y) (Either x y) where
+instance Filterable (A x y) (Either x y) where
   filter p (A xs ys) = A
     (List.filter (p . Left) xs)
     ys
@@ -213,12 +207,12 @@ instance Filter (A x y) (Either x y) where
 Bad.filter p = Good.filter $ either (p . Left) (const True)
 ```
 
-The root of all evaluation
+All the way down
 --------
 For many types an additional law holds: `filter (const False) = const x`. We can model this with
 
 ```haskell
-class Filter f a => Rooted f where
+class Filterable f a => Rooted f where
   -- Law: absorbing element
   --   filter (const False) = const root
   root :: f
@@ -231,25 +225,23 @@ class Filter f where
   type PredicateTarget f :: *
   filter :: (PredicateTarget f -> Bool) -> f -> f
 
-class Filter f => Rooted f where
+class Filterable f => Rooted f where
   root :: f
 
 instance Rooted [a] where
   root = []
 
-instance Filter a x => Filter (Const a b) x where
-  filter p (Const a) = Const (filter p a)
+instance Rooted Text x where
+  root = Text.empty
 
 <!--
 -- #endif
 -->
 
-
-
-Counter-example of a type that has `Filter` but not `Rooted`:
+Here's a [counterexample](https://blog.functorial.com/posts/2015-12-06-Counterexamples.html) of a type that is `Filter` but not `Rooted`:
 ```haskell
 data NotRooted b a = NotRooted Bool [a]
-instance Filter (NotRooted a) where
+instance Filterable (NotRooted a) where
   type PredicateTarget (NotRooted a) = a
   filter p (NotRooted b xs) = NotRooted b (filter p xs)
 ```
@@ -277,7 +269,7 @@ That is, filtering out an element from this implicit set results in a new `Predi
 What happens if we filter them all out? We're left with `Predicate (const False)`.
 
 ```haskell
-instance Filter (Predicate a) where
+instance Filterable (Predicate a) where
   type PredicateTarget (Predicate a) = a -- hello there semantic satiation
   filter p (Predicate q) = Predicate (\x -> p x && q x)
 instance Rooted (Predicate a) where
@@ -300,7 +292,7 @@ Now we know that empty here is `Equivalence $ \_ _ -> True`, a single equivalenc
 In other words, filtering an `Equivalence` introduces a new equivalence class which contains exactly the elements for which the predicate failed.
 
 ```haskell
-instance Filter (Equivalence a) where
+instance Filterable (Equivalence a) where
   type PredicateTarget (Equivalence a) = a
   filter p (Equivalence f) = Equivalence $ \a b -> case (p a, p b) of
     (True, True) -> f a b
@@ -314,14 +306,14 @@ What is variance
 --------
 So far we've only seen instances for glorified sequences and sets, types whose components can be thrown out independently. Things get more interesting when they can't. It's common to have the equivalent of
 ```haskell
-instance Filter (Map k v) v where
+instance Filterable (Map k v) v where
 -- >   type PredicateTarget (Map k v) = v
  filter = Map.filter
 ```
 
 but this actually violates our universal property, which instead demands
 ```haskell
-instance Filter (Map k v) (k,v) where
+instance Filterable (Map k v) (k,v) where
 -- >   type PredicateTarget (Map k v) = v
   filter p = Map.filterWithKey (curry p)
 ```
@@ -333,7 +325,7 @@ since
 but we can't do the predicate factoring in the other direction. Let's wrap things up with the higher-ranked version
 
 ```haskell
-instance Filter (DMap k v) (DSum k v) where
+instance Filterable (DMap k v) (DSum k v) where
   filter p = DMap.filterWithKey $ \(k, v) -> p (k :=> v)
 
 instance Rooted (Map k v) where
@@ -350,7 +342,7 @@ Ok, so all those annoying laws did bring benefits - we won't need separate filte
 
 In the next post we'll re-evaluate these connections to find out how the tricks used here can figure into other household classes
 
-A special thanks to the libraries (and respective authors/maintainers/contributors) in this area which heavily influenced both the problems and solutions in this post.
+A special thanks to libraries (well, to authors/maintainers/contributors) in this area which heavily influenced both the problems and solutions in this post.
 - [contravariant](https://hackage.haskell.org/package/contravariant)
 - [mono-traversable](https://hackage.haskell.org/package/mono-traversable)
 - [rank2classes](https://hackage.haskell.org/package/rank2classes)

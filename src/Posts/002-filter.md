@@ -97,7 +97,7 @@ With these loose instances we're even allowing mutually exclusive predicates to 
 We address this by also requiring that if a value can be filtered to multiple ones, then mutually exclusive predicates must be mapped to different values:
 
 ```haskell
-  -- Specificity
+Specificity
   forall xs. exists p. filter p xs = filter (not . p) xs <=> (forall h. xs = filter h xs)
 ```
 
@@ -220,7 +220,7 @@ This can be fixed by instead using an associated type family:
 
 > instance Rooted [a] where
 >   root = []
-
+```
 
 <!--
 -- #endif
@@ -252,7 +252,7 @@ But what does that really mean? Let's look at an example from `Data.Functor.Cont
 newtype Predicate a = Predicate { getPredicate :: a -> Bool }
 ```
 
-If we think of this as an (indicator function)[https://en.wikipedia.org/wiki/Indicator_function], then it's reminiscent to `Data.Set.Set`. The element is in the set iff `getPredicate p a = True`.
+If we think of this as an [indicator function](https://en.wikipedia.org/wiki/Indicator_function), then it's reminiscent of `Data.Set.Set`. The element is in the set iff `getPredicate p a = True`.
 That is, filtering out an element from this implicit set results in a new `Predicate` for which `getPredicate p' a = False`.
 What happens if we filter them all out? We're left with `Predicate (const False)`.
 

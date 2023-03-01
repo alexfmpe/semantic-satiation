@@ -97,7 +97,7 @@ With these loose instances we're even allowing mutually exclusive predicates to 
 We address this by also requiring that if a value can be filtered to multiple ones, then mutually exclusive predicates must be mapped to different values:
 
 ```haskell
-Specificity
+Soundness
   forall xs. exists p. filter p xs = filter (not . p) xs <=> (forall h. xs = filter h xs)
 ```
 
@@ -144,7 +144,7 @@ We can implement this behavior uniquely in terms of `ByteString.filter`, but not
   instance Filterable [Word4] Word4
 ```
 
-so why can't we do something similar? Well, for `Word4` we'd be splitting each `Word8` in two and independently applying the predicate, but the action taken (keep or drop) wouldn't be independent so we'd violate _Specificity_. For our uncurried `Word16`, we'd need to grab bytes in pairs, which we could filter atomically. However, this breaks down once we consider odd lengths. What would this filter do when given a predicate and a singleton? If we don't apply the predicate to the element we have a `const`. We need to always return the singleton or break _Identity_. Thus we end up stuck on a non-empty bytestring. Since the `Word8` implementation allows making further "progress", another partial order suggests itself, from which we again pick the minimal:
+so why can't we do something similar? Well, for `Word4` we'd be splitting each `Word8` in two and independently applying the predicate, but the action taken (keep or drop) wouldn't be independent so we'd violate _Soundness_. For our uncurried `Word16`, we'd need to grab bytes in pairs, which we could filter atomically. However, this breaks down once we consider odd lengths. What would this filter do when given a predicate and a singleton? If we don't apply the predicate to the element we have a `const`. We need to always return the singleton or break _Identity_. Thus we end up stuck on a non-empty bytestring. Since the `Word8` implementation allows making further "progress", another partial order suggests itself, from which we again pick the minimal:
 
 ```haskell
   (forall p. filter p xs = xs) => (forall f p. f p xs = xs)

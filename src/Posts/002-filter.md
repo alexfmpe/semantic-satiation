@@ -18,7 +18,7 @@ Identity
 ```
 
 which relies on parametricity of `(* -> *)` types. This rules out "obvious" use cases like `ByteString` and `Text`, and often `Functor` is a superclass, throwing `Set` out the window as well.
-As it turns out, if we narrow down the laws enough, there's no need to care about the specifiy arity/kind. Note the identity law will force the second argument and the return to have unifiable types, so we can parametrize things as much as needed, via `MultiParamTypeClasses` or associated type families, and constrain via semantics rather than via syntax.
+As it turns out, if we narrow down the laws enough, there's no need to care about the specific arity/kind. Note the identity law will force the second argument and the return to have unifiable types, so we can parametrize things as much as needed, via `MultiParamTypeClasses` or associated type families, and constrain via semantics rather than via syntax.
 
 This is a literate haskell file, so we start by getting the extensions/imports out of the way.
 
@@ -48,7 +48,7 @@ Instead of the usual we'll do
 -- #ifdef FILTER_FUNDEPS
 -->
 ```haskell
-> class FilterableX f a | f -> a where
+> class Filterable f a | f -> a where
 >   filter :: (a -> Bool) -> f -> f
 
 > instance Filterable [a] a where
@@ -208,18 +208,18 @@ class Filterable f a => Rooted f where
 This can be fixed by instead using an associated type family:
 
 ```haskell
-> class Filterable f where
+> class FilterableX f where
 >  type PredicateTarget f :: *
->  filter :: (PredicateTarget f -> Bool) -> f -> f
+>  filterX :: (PredicateTarget f -> Bool) -> f -> f
 
-> class Filterable f => Rooted f where
->  root :: f
+class Filterable f => Rooted f where
+ root :: f
 
-> instance Rooted Text where
->  root = Text.empty
+instance Rooted Text where
+  root = Text.empty
 
-> instance Rooted [a] where
->   root = []
+instance Rooted [a] where
+  root = []
 ```
 
 <!--

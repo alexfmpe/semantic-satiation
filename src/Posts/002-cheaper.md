@@ -105,3 +105,9 @@ with `cabal test` still operating as usual
 ```
 
 More generally, we're dealing with an hyperrectangle, where each possible simplification is movement alongside an axis. The ideal setup allows for staying in the fast/instant region as much as possible and granularly step towards the production-grade corner only as far and long as needed (say, to fix a bug), returning back down right after. Select points in this hyperrectangle can then be used as the desired defaults for steps of the development cycle, as in the above degress-of-reliability list.
+
+Backlinks
+---------------
+
+- [Discourse](https://discourse.haskell.org/t/cheaper-producing-a-program-with-less-developer-time/13225)
+- [Reddit](https://www.reddit.com/r/haskell/comments/1opjm2o/cheaper_producing_a_program_with_less_developer/)
